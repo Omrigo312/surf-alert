@@ -1,54 +1,56 @@
 import requests
-import datetime
+from datetime import datetime
 import os
 
-SURFLINE_URL = "https://services.surfline.com/kbyg/spots/forecasts/wave"
-SPOT_ID = "584204204e65fad6a7709aaf"
-DAYS = 3
-THRESHOLDS = {"wave": 0.6, "period": 6, "score": 1}
-
-IFTTT_KEY = os.getenv("IFTTT_KEY")
+# --- Configuration ---
+LAT = 31.958336
+LON = 34.625015
+IFTTT_KEY = os.getenv("IFTTT_KEY")  # Set in GitHub Actions or .env
 IFTTT_EVENT = "surf_alert"
+WAVE_MIN = 0.6       # meters
+PERIOD_MIN = 6       # seconds
 
 def fetch_forecast():
-    params = {
-        "spotId": SPOT_ID,
-        "days": DAYS,
-        "intervalHours": 6,
-        "maxHeights": "false"
-    }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124 Safari/537.36"
-    }
-    res = requests.get(SURFLINE_URL, params=params, headers=headers)
+    url = (
+        "https://marine-api.open-meteo.com/v1/marine"
+        f"?latitude={LAT}&longitude={LON}"
+        "&hourly=wave_height,swell_wave_period"
+        "&timezone=auto"
+    )
+    res = requests.get(url)
     res.raise_for_status()
     return res.json()
 
-def find_good_slots(data):
+def find_good_times(data):
+    times = data["hourly"]["time"]
+    heights = data["hourly"]["wave_height"]
+    periods = data["hourly"]["swell_wave_period"]
+
     good = []
-    for item in data.get("data", {}).get("wave", []):
-        wave_max = item["surf"]["raw"]["max"]
-        score = item["surf"]["optimalScore"]
-        period_ok = any(s.get("period", 0) > THRESHOLDS["period"] for s in item["swells"])
-        if wave_max > THRESHOLDS["wave"] and score > THRESHOLDS["score"] and period_ok:
-            t = datetime.datetime.fromtimestamp(item["timestamp"]).strftime("%Y-%m-%d %H:%M")
-            good.append(f"{t}: 🌊 {wave_max:.2f}m | period > 6s | score {score}")
+    for t, h, p in zip(times, heights, periods):
+        if h > WAVE_MIN and p > PERIOD_MIN:
+            local_time = datetime.fromisoformat(t).strftime("%a %H:%M")
+            good.append(f"{local_time} — 🌊 {h:.2f}m, ⏱ {p:.1f}s")
     return good
 
-def send_ifttt(good_slots):
+def send_ifttt_alert(messages):
+    if not messages:
+        print("No good surf conditions found.")
+        return
+
     url = f"https://maker.ifttt.com/trigger/{IFTTT_EVENT}/with/key/{IFTTT_KEY}"
-    body = {"value1": "\n".join(good_slots)}
-    r = requests.post(url, json=body)
-    print("✅ Alert sent" if r.ok else f"❌ Failed: {r.status_code}")
+    body = {"value1": "\n".join(messages)}
+    res = requests.post(url, json=body)
+    if res.status_code == 200:
+        print("✅ IFTTT alert sent!")
+    else:
+        print(f"❌ IFTTT error: {res.status_code}\n{res.text}")
 
 def main():
     try:
         forecast = fetch_forecast()
-        good = find_good_slots(forecast)
-        if good:
-            send_ifttt(good)
-        else:
-            print("No good conditions today.")
+        good_slots = find_good_times(forecast)
+        send_ifttt_alert(good_slots)
     except Exception as e:
         print("❌ Error:", e)
 
