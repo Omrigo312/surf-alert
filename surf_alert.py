@@ -17,7 +17,10 @@ def fetch_forecast():
         "intervalHours": 6,
         "maxHeights": "false"
     }
-    res = requests.get(SURFLINE_URL, params=params)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124 Safari/537.36"
+    }
+    res = requests.get(SURFLINE_URL, params=params, headers=headers)
     res.raise_for_status()
     return res.json()
 
