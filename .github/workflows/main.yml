@@ -1,0 +1,26 @@
+name: Surf Alert
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # Runs every day at 5:00 UTC (~8AM Israel)
+  workflow_dispatch:      # Allow manual runs
+
+jobs:
+  surf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run surf alert script
+        env:
+          IFTTT_KEY: ${{ secrets.IFTTT_KEY }}
+        run: python surf_alert.py
