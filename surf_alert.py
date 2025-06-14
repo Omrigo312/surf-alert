@@ -34,7 +34,7 @@ def find_good_times(data):
     return good
 
 def send_ifttt_alert(messages):
-    if messages:
+    if not messages:
         print("No good surf conditions found.")
         return
 
